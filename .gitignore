@@ -1,0 +1,62 @@
+## Build results
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Re]leases/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bbin/
+bin/
+obj/
+
+## Visual Studio cache and settings
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+## Visual Studio Code settings
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+!.vscode/code-workspace
+
+## JetBrains Rider / IntelliJ settings
+.idea/
+*.sln.iml
+
+## User-specific files
+*.rsuser
+*.suo
+*.user
+*.userosscache
+sln.docstates
+
+## Roslyn Analyzer caches
+.roslyn/
+
+## Test results
+BenchmarkDotNet.Artifacts/
+TestResults/
+*.trx
+*.vstest
+
+## Package management
+packages/
+*.nupkg
+# NuGet Restore artifacts
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+## OS-generated files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+appsettings.json

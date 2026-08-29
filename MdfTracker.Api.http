@@ -1,0 +1,60 @@
+@host = http://localhost:5199
+@sessionId = 00000000-0000-0000-0000-000000000000
+
+### API index
+GET {{host}}/
+
+### Health (queue + socket counters)
+GET {{host}}/api/health
+
+### Start a session
+POST {{host}}/api/sessions
+Content-Type: application/json
+
+{
+  "cameraType": "back",
+  "trackerAlgorithm": "csrt",
+  "startTime": "2026-08-27T21:27:18Z",
+  "screenWidth": 1080,
+  "screenHeight": 2340
+}
+
+### End a session
+POST {{host}}/api/sessions/{{sessionId}}/end
+Content-Type: application/json
+
+{
+  "endTime": "2026-08-27T21:31:02Z",
+  "averageFps": 27.53,
+  "isSuccessful": true
+}
+
+### History — newest first
+GET {{host}}/api/sessions?page=1&perPage=20
+
+### History — filtered
+GET {{host}}/api/sessions?status=completed&trackerAlgorithm=kcf&cameraType=front&isSuccessful=false&search=TS-2026
+
+### One session
+GET {{host}}/api/sessions/{{sessionId}}
+
+### Frames — newest first (default)
+GET {{host}}/api/sessions/{{sessionId}}/frames?page=1&perPage=100
+
+### Frames — chronological, for charts
+GET {{host}}/api/sessions/{{sessionId}}/frames?perPage=1000&sort=asc
+
+### Lost / reacquired events — newest first
+GET {{host}}/api/sessions/{{sessionId}}/events
+
+### Detail view analytics: path, X/Y over time, red zones
+GET {{host}}/api/sessions/{{sessionId}}/analytics?maxPoints=5000
+
+### Delete a session (cascades to frames and events)
+DELETE {{host}}/api/sessions/{{sessionId}}
+
+### Global overview KPIs + success/failure by tracker
+GET {{host}}/api/stats/overview
+
+### Live tracking room status
+GET {{host}}/api/stats/live
