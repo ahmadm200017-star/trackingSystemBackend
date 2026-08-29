@@ -1,0 +1,14 @@
+**/bin/
+**/obj/
+**/.vs/
+**/.vscode/
+**/.idea/
+.git/
+.gitignore
+Dockerfile
+.dockerignore
+**/*.user
+**/*.suo
+README.md
+MdfTracker.Api.http
+TestResults/
