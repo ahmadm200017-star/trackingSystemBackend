@@ -13,6 +13,10 @@ param(
     [string]$User = 'ahmad12122-001',
     [string]$RemoteRoot = '/',
     [string]$LocalDir = 'publish-selfcontained',
+    # Files smaller than this are always re-uploaded rather than size-matched. 64 KB keeps
+    # the resume benefit for the multi-MB runtime DLLs while never trusting size on the
+    # small text files (html/json/config) whose content changes without changing length.
+    [int]$SkipUnderBytes = 65536,
     [switch]$List
 )
 
@@ -135,7 +139,15 @@ foreach ($f in $files) {
         $made[$dir] = $true
     }
 
-    if (-not $dir -and $existing.ContainsKey($f.Name) -and $existing[$f.Name] -eq $f.Length) {
+    # Resume support: skip a file already on the server at the same size. Size alone is a
+    # weak identity check, so it is only trusted for large files. Small ones are cheap to
+    # re-send and are exactly where collisions bite - a Vite index.html keeps a constant
+    # size across builds because the asset hash it points at is always the same length,
+    # so a changed index.html looked "already present" and the deploy shipped stale HTML.
+    if (-not $dir -and
+        $f.Length -ge $SkipUnderBytes -and
+        $existing.ContainsKey($f.Name) -and
+        $existing[$f.Name] -eq $f.Length) {
         $skipped++
         continue
     }

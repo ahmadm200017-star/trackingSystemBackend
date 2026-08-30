@@ -58,12 +58,12 @@ public class GroqVisionClient
             throw new GroqVisionException("Groq is not configured. Set Groq:ApiKey to enable object descriptions.");
         }
 
-        var payload = new
+        var payload = new Dictionary<string, object?>
         {
-            model = _options.Model,
-            temperature = _options.Temperature,
-            max_completion_tokens = _options.MaxCompletionTokens,
-            messages = new object[]
+            ["model"] = _options.Model,
+            ["temperature"] = _options.Temperature,
+            ["max_completion_tokens"] = _options.MaxCompletionTokens,
+            ["messages"] = new object[]
             {
                 new
                 {
@@ -80,6 +80,12 @@ public class GroqVisionClient
                 }
             }
         };
+
+        // Omitted entirely when blank: models outside the Qwen 3 family reject the field.
+        if (!string.IsNullOrWhiteSpace(_options.ReasoningEffort))
+        {
+            payload["reasoning_effort"] = _options.ReasoningEffort;
+        }
 
         using var request = new HttpRequestMessage(HttpMethod.Post, CompletionsPath)
         {
