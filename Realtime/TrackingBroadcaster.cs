@@ -67,6 +67,9 @@ public class TrackingBroadcaster
     public Task BroadcastSessionEndedAsync(SessionResponse session) =>
         _hub.Clients.All.SessionEnded(session);
 
+    public Task BroadcastSessionDescribedAsync(SessionResponse session) =>
+        _hub.Clients.All.SessionDescribed(session);
+
     // ---------- raw socket replies (mobile only) ----------
 
     public async Task SendAsync(WebSocket socket, object payload, CancellationToken cancellationToken = default)

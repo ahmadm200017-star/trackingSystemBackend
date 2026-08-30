@@ -22,6 +22,17 @@ public class SessionResponse
 
     public bool IsSuccessful { get; set; }
 
+    /// <summary>Groq's description of the tracked object, or null when it was never produced.</summary>
+    public string? ObjectDescription { get; set; }
+
+    public string? DeviceModel { get; set; }
+
+    public string? OsVersion { get; set; }
+
+    public string? AppVersion { get; set; }
+
+    public decimal? ProcessingScale { get; set; }
+
     public int ScreenWidth { get; set; }
 
     public int ScreenHeight { get; set; }
@@ -43,6 +54,11 @@ public class SessionResponse
         AverageFps = session.AverageFps,
         Status = session.Status,
         IsSuccessful = session.IsSuccessful,
+        ObjectDescription = session.ObjectDescription,
+        DeviceModel = session.DeviceModel,
+        OsVersion = session.OsVersion,
+        AppVersion = session.AppVersion,
+        ProcessingScale = session.ProcessingScale,
         ScreenWidth = session.ScreenWidth,
         ScreenHeight = session.ScreenHeight,
         DurationSeconds = session.EndTime.HasValue

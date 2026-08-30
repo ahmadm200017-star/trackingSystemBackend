@@ -4,6 +4,7 @@ using MdfTracker.Api.Realtime;
 using MdfTracker.Api.Requests;
 using MdfTracker.Api.Responses;
 using MdfTracker.Api.Services;
+using MdfTracker.Api.Services.Vision;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -18,12 +19,21 @@ public class SessionsController : ControllerBase
     private readonly AppDbContext _db;
     private readonly SessionNumberGenerator _numbers;
     private readonly TrackingBroadcaster _broadcaster;
+    private readonly GroqVisionClient _vision;
+    private readonly ILogger<SessionsController> _logger;
 
-    public SessionsController(AppDbContext db, SessionNumberGenerator numbers, TrackingBroadcaster broadcaster)
+    public SessionsController(
+        AppDbContext db,
+        SessionNumberGenerator numbers,
+        TrackingBroadcaster broadcaster,
+        GroqVisionClient vision,
+        ILogger<SessionsController> logger)
     {
         _db = db;
         _numbers = numbers;
         _broadcaster = broadcaster;
+        _vision = vision;
+        _logger = logger;
     }
 
     /// <summary>Start a session. The device then streams frames over /ws/track.</summary>
@@ -40,6 +50,12 @@ public class SessionsController : ControllerBase
             TrackerAlgorithm = request.TrackerAlgorithm!.Value,
             Status = SessionStatus.Active,
             IsSuccessful = false,
+            DeviceModel = Blank(request.DeviceModel),
+            OsVersion = Blank(request.OsVersion),
+            AppVersion = Blank(request.AppVersion),
+            ProcessingScale = request.ProcessingScale.HasValue
+                ? Math.Round(request.ProcessingScale.Value, 2)
+                : null,
             ScreenWidth = request.ScreenWidth ?? 0,
             ScreenHeight = request.ScreenHeight ?? 0
         };
@@ -80,6 +96,70 @@ public class SessionsController : ControllerBase
 
         _broadcaster.RemoveMobile(session.Id);
         await _broadcaster.BroadcastSessionEndedAsync(response);
+
+        return Ok(response);
+    }
+
+    /// <summary>
+    /// Describe the tracked object from the first frame of the run.
+    ///
+    /// The device posts the padded crop around its seed box as soon as the tracker is
+    /// seeded; this asks Groq what it is, stores the answer on the session and pushes it to
+    /// the dashboards. Called at most once per session — a second call is rejected rather
+    /// than spending another Groq request on the same object.
+    /// </summary>
+    [HttpPost("{id:guid}/description")]
+    public async Task<ActionResult<SessionResponse>> Describe(
+        Guid id,
+        DescribeObjectRequest request,
+        CancellationToken cancellationToken)
+    {
+        var session = await _db.TrackingSessions.FirstOrDefaultAsync(s => s.Id == id, cancellationToken);
+        if (session is null)
+        {
+            return NotFound(new MessageResponse("Session not found."));
+        }
+
+        if (!string.IsNullOrWhiteSpace(session.ObjectDescription))
+        {
+            return Conflict(new MessageResponse("This session already has an object description."));
+        }
+
+        if (!_vision.IsConfigured)
+        {
+            // Not an error the device can act on: tracking is unaffected, the session simply
+            // has no description. 503 keeps it distinct from a Groq outage.
+            return StatusCode(StatusCodes.Status503ServiceUnavailable,
+                new MessageResponse("Object description is disabled — Groq:ApiKey is not configured."));
+        }
+
+        var image = StripDataUrl(request.ImageBase64!);
+        if (!IsBase64(image))
+        {
+            return BadRequest(new MessageResponse("imageBase64 is not valid base64."));
+        }
+
+        string description;
+        try
+        {
+            description = await _vision.DescribeAsync(
+                image,
+                request.MimeType ?? "image/jpeg",
+                cancellationToken);
+        }
+        catch (GroqVisionException error)
+        {
+            _logger.LogWarning(error, "Object description failed for session {SessionId}", id);
+            return StatusCode(StatusCodes.Status502BadGateway, new MessageResponse(error.Message));
+        }
+
+        session.ObjectDescription = description;
+        await _db.SaveChangesAsync(cancellationToken);
+
+        var counts = await CountsAsync(new[] { id }, cancellationToken);
+        var response = SessionResponse.From(session, FrameCountOf(counts, id), LostCountOf(counts, id));
+
+        await _broadcaster.BroadcastSessionDescribedAsync(response);
 
         return Ok(response);
     }
@@ -261,6 +341,27 @@ public class SessionsController : ControllerBase
     }
 
     // ---------- helpers ----------
+
+    /// <summary>Empty strings from the device are stored as null, not as blanks.</summary>
+    private static string? Blank(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    /// <summary>Accepts either raw base64 or a full <c>data:image/...;base64,</c> URL.</summary>
+    private static string StripDataUrl(string value)
+    {
+        var trimmed = value.Trim();
+        if (!trimmed.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+        {
+            return trimmed;
+        }
+
+        var comma = trimmed.IndexOf(',');
+        return comma >= 0 ? trimmed[(comma + 1)..] : trimmed;
+    }
+
+    /// <summary>Checked here so a malformed upload is a 400 rather than a Groq round trip.</summary>
+    private static bool IsBase64(string value) =>
+        value.Length > 0 && Convert.TryFromBase64String(value, new Span<byte>(new byte[value.Length]), out _);
 
     private static List<SessionFrame> Downsample(List<SessionFrame> frames, int maxPoints)
     {

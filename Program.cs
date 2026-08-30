@@ -3,8 +3,10 @@ using MdfTracker.Api;
 using MdfTracker.Api.Data;
 using MdfTracker.Api.Realtime;
 using MdfTracker.Api.Services;
+using MdfTracker.Api.Services.Vision;
 using Microsoft.AspNetCore.Mvc.ModelBinding.Metadata;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -38,6 +40,17 @@ builder.Services.AddSingleton<TrackingBroadcaster>();
 builder.Services.AddHostedService<FrameWriterService>();
 
 builder.Services.AddScoped<SessionNumberGenerator>();
+
+// Object description: the Groq key lives here, never on the device. Without it the
+// description endpoint answers 503 and tracking carries on unaffected.
+builder.Services.Configure<GroqOptions>(builder.Configuration.GetSection(GroqOptions.SectionName));
+
+builder.Services.AddHttpClient<GroqVisionClient>((provider, client) =>
+{
+    var options = provider.GetRequiredService<IOptions<GroqOptions>>().Value;
+    client.BaseAddress = new Uri(options.BaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+});
 
 var allowedOrigins = builder.Configuration.GetSection("Cors:Origins").Get<string[]>() ?? Array.Empty<string>();
 
@@ -80,6 +93,21 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.EnsureCreated();
+
+    // EnsureCreated only ever creates a missing database - it will not add a column to one
+    // that already exists. object_description arrived after the first deploy, so it is
+    // patched in by hand here. Drop this once the project moves to EF migrations.
+    db.Database.ExecuteSqlRaw(
+        @"IF COL_LENGTH('tracking_sessions', 'object_description') IS NULL
+              ALTER TABLE tracking_sessions ADD object_description NVARCHAR(500) NULL;
+          IF COL_LENGTH('tracking_sessions', 'device_model') IS NULL
+              ALTER TABLE tracking_sessions ADD device_model NVARCHAR(120) NULL;
+          IF COL_LENGTH('tracking_sessions', 'os_version') IS NULL
+              ALTER TABLE tracking_sessions ADD os_version NVARCHAR(60) NULL;
+          IF COL_LENGTH('tracking_sessions', 'app_version') IS NULL
+              ALTER TABLE tracking_sessions ADD app_version NVARCHAR(30) NULL;
+          IF COL_LENGTH('tracking_sessions', 'processing_scale') IS NULL
+              ALTER TABLE tracking_sessions ADD processing_scale DECIMAL(3,2) NULL;");
 }
 
 app.Run();

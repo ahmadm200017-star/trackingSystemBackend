@@ -15,6 +15,21 @@ public class CreateSessionRequest
     /// <summary>Defaults to server time when omitted.</summary>
     public DateTimeOffset? StartTime { get; set; }
 
+    /// <summary>Handset model, e.g. "Google Pixel 7".</summary>
+    [StringLength(120, ErrorMessage = "deviceModel must be 120 characters or fewer.")]
+    public string? DeviceModel { get; set; }
+
+    /// <summary>Platform and version, e.g. "Android 14 (SDK 34)".</summary>
+    [StringLength(60, ErrorMessage = "osVersion must be 60 characters or fewer.")]
+    public string? OsVersion { get; set; }
+
+    [StringLength(30, ErrorMessage = "appVersion must be 30 characters or fewer.")]
+    public string? AppVersion { get; set; }
+
+    /// <summary>Frame downscale factor used by the tracker, 0.25-1.0.</summary>
+    [Range(0.05, 1.0, ErrorMessage = "processingScale must be between 0.05 and 1.")]
+    public decimal? ProcessingScale { get; set; }
+
     [Range(0, 20000, ErrorMessage = "screenWidth must be between 0 and 20000.")]
     public int? ScreenWidth { get; set; }
 

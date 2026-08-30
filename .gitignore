@@ -60,3 +60,6 @@ ehthumbs.db
 Desktop.ini
 .DS_Store
 appsettings.json
+# Local publish output
+publish-selfcontained/
+MdfTracker-deploy.zip

@@ -21,4 +21,10 @@ public interface ITrackingClient
     Task SessionStarted(SessionResponse session);
 
     Task SessionEnded(SessionResponse session);
+
+    /// <summary>
+    /// The object description came back from Groq. Sent to every dashboard, like the other
+    /// lifecycle calls, so both the live room and any open session list can fill it in.
+    /// </summary>
+    Task SessionDescribed(SessionResponse session);
 }
