@@ -13,10 +13,10 @@ param(
     [string]$User = 'ahmad12122-001',
     [string]$RemoteRoot = '/',
     [string]$LocalDir = 'publish-selfcontained',
-    # Files smaller than this are always re-uploaded rather than size-matched. 64 KB keeps
-    # the resume benefit for the multi-MB runtime DLLs while never trusting size on the
-    # small text files (html/json/config) whose content changes without changing length.
-    [int]$SkipUnderBytes = 65536,
+    # Files matching this are never size-matched, always re-sent. Everything else - the
+    # ~350 third-party runtime assemblies, which only change when a package version does -
+    # keeps the size-based skip, so a deploy stays fast.
+    [string]$AlwaysUpload = '(\.(json|config|xml|html|htm|txt|css|js|pdb)$)|(^MdfTracker\.Api)',
     [switch]$List
 )
 
@@ -139,13 +139,19 @@ foreach ($f in $files) {
         $made[$dir] = $true
     }
 
-    # Resume support: skip a file already on the server at the same size. Size alone is a
-    # weak identity check, so it is only trusted for large files. Small ones are cheap to
-    # re-send and are exactly where collisions bite - a Vite index.html keeps a constant
-    # size across builds because the asset hash it points at is always the same length,
-    # so a changed index.html looked "already present" and the deploy shipped stale HTML.
+    # Resume support: skip a file already on the server at the same size.
+    #
+    # Size is a weak identity check, so it is not trusted for anything that can change
+    # content without changing length. Two cases actually bite:
+    #   - a Vite index.html is a constant size across builds, because the asset hash it
+    #     points at is always the same length, so a changed one looked "already present"
+    #     and the deploy silently shipped HTML referencing the previous build's bundle;
+    #   - a recompiled assembly can land on the same byte count, which would strand the
+    #     old code on the server with no sign anything went wrong.
+    # Both are covered by $AlwaysUpload. Third-party runtime files are left to the skip:
+    # they only change when a package version changes, which changes their size too.
     if (-not $dir -and
-        $f.Length -ge $SkipUnderBytes -and
+        $f.Name -notmatch $AlwaysUpload -and
         $existing.ContainsKey($f.Name) -and
         $existing[$f.Name] -eq $f.Length) {
         $skipped++
