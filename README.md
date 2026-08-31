@@ -64,7 +64,7 @@ dotnet run
 | `Cors:Origins` | `[]` | Empty reflects the caller's origin, which is the dev default. SignalR's browser client sends credentials on negotiate, and `AllowAnyOrigin()` is illegal with `AllowCredentials()`, so there is no wildcard. |
 | `Groq:ApiKey` | *empty* | **Server-side only.** Empty disables descriptions; the endpoint then answers `503` and tracking is unaffected. |
 | `Groq:Model` | `qwen/qwen3.8-27b` | Must be a vision-capable Groq model. One that Groq no longer serves fails with a `404`, not a fallback. |
-| `Groq:Temperature` / `TopP` / `MaxCompletionTokens` / `ReasoningEffort` / `Stop` / `Stream` | `0.6` / `0.95` / `2048` / `default` / null / `true` | Mirrors Groq's published example for this model. Blank or null values are omitted from the request. |
+| `Groq:Temperature` / `TopP` / `MaxCompletionTokens` / `ReasoningEffort` / `Stop` / `Stream` | `0.6` / `0.95` / `96` / `default` / null / `true` | Otherwise mirrors Groq's published example. `MaxCompletionTokens` deliberately does not: it counts against the tokens-per-minute limit as a reservation, and the example's 2048 allowed only about two descriptions a minute. |
 | `Groq:TimeoutSeconds` | `30` | Must stay below the mobile client's own deadline for the description call. |
 
 `appsettings.json` is **gitignored** — it holds the connection string and the Groq key.
@@ -182,6 +182,8 @@ without explicit checks anything it received reached the database.
 | `startTime` | Within 2 days of server time. |
 | `endTime` | Not before `startTime`, not in the future, not implying a run over 24 hours. |
 | `processingScale` | 0.05–1.0. |
+| `latitude` / `longitude` | -90 to 90 and -180 to 180, and must be sent together. |
+| `locationAccuracyMeters` | 0–100,000. |
 | `page` | Clamped 1–100,000. `Skip()` takes an int, so an unclamped page overflows `(page - 1) * perPage`. |
 | Device strings | Sanitised, not rejected: control characters stripped, whitespace collapsed, truncated to the column width. |
 
@@ -196,8 +198,12 @@ DTOs, nowhere else.
 
 **`tracking_sessions`** — `id`, `session_number`, `start_time`, `end_time`, `camera_type`,
 `tracker_algorithm`, `average_fps`, `status`, `is_successful`, `object_description`,
-`device_model`, `os_version`, `app_version`, `processing_scale`, `screen_width`,
-`screen_height`
+`latitude`, `longitude`, `location_accuracy_m`, `device_model`, `os_version`,
+`app_version`, `processing_scale`, `screen_width`, `screen_height`
+
+`latitude` / `longitude` are decimal degrees at 6 decimal places, about 0.11 m at the
+equator and well past what GPS resolves. Both are null when the device had no fix or the
+user declined the permission, and they are only ever stored as a pair.
 
 **`session_frames`** — `id`, `session_id`, `frame_timestamp`, `x_coordinate`,
 `y_coordinate`, `width`, `height`

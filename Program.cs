@@ -107,7 +107,13 @@ using (var scope = app.Services.CreateScope())
           IF COL_LENGTH('tracking_sessions', 'app_version') IS NULL
               ALTER TABLE tracking_sessions ADD app_version NVARCHAR(30) NULL;
           IF COL_LENGTH('tracking_sessions', 'processing_scale') IS NULL
-              ALTER TABLE tracking_sessions ADD processing_scale DECIMAL(3,2) NULL;");
+              ALTER TABLE tracking_sessions ADD processing_scale DECIMAL(3,2) NULL;
+          IF COL_LENGTH('tracking_sessions', 'latitude') IS NULL
+              ALTER TABLE tracking_sessions ADD latitude DECIMAL(9,6) NULL;
+          IF COL_LENGTH('tracking_sessions', 'longitude') IS NULL
+              ALTER TABLE tracking_sessions ADD longitude DECIMAL(9,6) NULL;
+          IF COL_LENGTH('tracking_sessions', 'location_accuracy_m') IS NULL
+              ALTER TABLE tracking_sessions ADD location_accuracy_m DECIMAL(8,2) NULL;");
 }
 
 app.Run();

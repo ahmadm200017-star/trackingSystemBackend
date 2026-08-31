@@ -27,6 +27,18 @@ public class TrackingSession
     /// </summary>
     public string? ObjectDescription { get; set; }
 
+    /// <summary>
+    /// Where the run was recorded, in decimal degrees. Null when the device had no fix or
+    /// the user declined the location permission - both are normal and neither blocks a
+    /// session, so every consumer has to handle the absence.
+    /// </summary>
+    public decimal? Latitude { get; set; }
+
+    public decimal? Longitude { get; set; }
+
+    /// <summary>Horizontal accuracy of the fix in metres, as reported by the platform.</summary>
+    public decimal? LocationAccuracyMeters { get; set; }
+
     /// <summary>Handset the run came from, e.g. "Google Pixel 7". Null for older sessions.</summary>
     public string? DeviceModel { get; set; }
 

@@ -16,6 +16,17 @@ public class CreateSessionRequest : IValidatableObject
     /// <summary>Defaults to server time when omitted.</summary>
     public DateTimeOffset? StartTime { get; set; }
 
+    /// <summary>Latitude in decimal degrees. Sent only when a fix was available.</summary>
+    [Range(-90, 90, ErrorMessage = "latitude must be between -90 and 90.")]
+    public decimal? Latitude { get; set; }
+
+    [Range(-180, 180, ErrorMessage = "longitude must be between -180 and 180.")]
+    public decimal? Longitude { get; set; }
+
+    /// <summary>Horizontal accuracy of the fix, in metres.</summary>
+    [Range(0, 100000, ErrorMessage = "locationAccuracyMeters must be between 0 and 100000.")]
+    public decimal? LocationAccuracyMeters { get; set; }
+
     /// <summary>Handset model, e.g. "Google Pixel 7".</summary>
     [StringLength(120, ErrorMessage = "deviceModel must be 120 characters or fewer.")]
     public string? DeviceModel { get; set; }
@@ -44,6 +55,17 @@ public class CreateSessionRequest : IValidatableObject
     /// </summary>
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
+        // A single coordinate is not a location. Rejecting the pair outright is better than
+        // storing half of one, which would put a session on the equator or the prime meridian.
+        if (Latitude.HasValue != Longitude.HasValue)
+        {
+            yield return new ValidationResult(
+                "latitude and longitude must be sent together.",
+                // Spelled as the wire names: member names given here bypass the camelCase
+                // metadata provider configured in Program.cs.
+                new[] { "latitude", "longitude" });
+        }
+
         if (StartTime is { } start)
         {
             var drift = (start - DateTimeOffset.UtcNow).Duration();
@@ -51,7 +73,7 @@ public class CreateSessionRequest : IValidatableObject
             {
                 yield return new ValidationResult(
                     $"startTime must be within {TrackingLimits.MaxSessionTimeDrift.TotalDays:0} days of server time.",
-                    new[] { nameof(StartTime) });
+                    new[] { "startTime" });
             }
         }
     }

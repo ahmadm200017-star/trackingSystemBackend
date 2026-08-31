@@ -51,6 +51,11 @@ public class SessionsController : ControllerBase
             TrackerAlgorithm = request.TrackerAlgorithm!.Value,
             Status = SessionStatus.Active,
             IsSuccessful = false,
+            Latitude = request.Latitude,
+            Longitude = request.Longitude,
+            LocationAccuracyMeters = request.LocationAccuracyMeters.HasValue
+                ? Math.Round(request.LocationAccuracyMeters.Value, 2)
+                : null,
             DeviceModel = InputSanitizer.Clean(request.DeviceModel, 120),
             OsVersion = InputSanitizer.Clean(request.OsVersion, 60),
             AppVersion = InputSanitizer.Clean(request.AppVersion, 30),

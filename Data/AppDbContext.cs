@@ -36,6 +36,9 @@ public class AppDbContext : DbContext
             entity.Property(e => e.Status).HasColumnName("status").HasConversion(EnumConverters.SessionStatus).HasMaxLength(10).IsRequired();
             entity.Property(e => e.IsSuccessful).HasColumnName("is_successful").IsRequired();
             entity.Property(e => e.ObjectDescription).HasColumnName("object_description").HasMaxLength(500);
+            entity.Property(e => e.Latitude).HasColumnName("latitude").HasPrecision(9, 6);
+            entity.Property(e => e.Longitude).HasColumnName("longitude").HasPrecision(9, 6);
+            entity.Property(e => e.LocationAccuracyMeters).HasColumnName("location_accuracy_m").HasPrecision(8, 2);
             entity.Property(e => e.DeviceModel).HasColumnName("device_model").HasMaxLength(120);
             entity.Property(e => e.OsVersion).HasColumnName("os_version").HasMaxLength(60);
             entity.Property(e => e.AppVersion).HasColumnName("app_version").HasMaxLength(30);

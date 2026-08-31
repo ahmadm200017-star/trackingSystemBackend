@@ -25,6 +25,12 @@ public class SessionResponse
     /// <summary>Groq's description of the tracked object, or null when it was never produced.</summary>
     public string? ObjectDescription { get; set; }
 
+    public decimal? Latitude { get; set; }
+
+    public decimal? Longitude { get; set; }
+
+    public decimal? LocationAccuracyMeters { get; set; }
+
     public string? DeviceModel { get; set; }
 
     public string? OsVersion { get; set; }
@@ -55,6 +61,9 @@ public class SessionResponse
         Status = session.Status,
         IsSuccessful = session.IsSuccessful,
         ObjectDescription = session.ObjectDescription,
+        Latitude = session.Latitude,
+        Longitude = session.Longitude,
+        LocationAccuracyMeters = session.LocationAccuracyMeters,
         DeviceModel = session.DeviceModel,
         OsVersion = session.OsVersion,
         AppVersion = session.AppVersion,
