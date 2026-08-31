@@ -4,6 +4,19 @@ using MdfTracker.Api.Realtime;
 namespace MdfTracker.Api.Validation;
 
 /// <summary>
+/// A frame that has passed validation, with the optional wire fields already resolved to
+/// the values that will be stored. Handing this back rather than the raw message means the
+/// caller cannot accidentally re-read a nullable field the validator has already settled.
+/// </summary>
+public readonly record struct ValidatedFrame(
+    DateTimeOffset Timestamp,
+    int X,
+    int Y,
+    int Width,
+    int Height,
+    double? Fps);
+
+/// <summary>
 /// Validates what arrives over the tracking socket.
 ///
 /// The REST surface gets DataAnnotations for free; the socket does not go through model
@@ -15,9 +28,35 @@ namespace MdfTracker.Api.Validation;
 public static class IngestValidator
 {
     /// <summary>
-    /// Returns null when the frame is usable, otherwise the reason to send back to the device.
+    /// True when the frame is usable, with <paramref name="frame"/> carrying the resolved
+    /// values. False sets <paramref name="problem"/> to the reason to send to the device.
     /// </summary>
-    public static string? ValidateFrame(IncomingWsMessage message, TrackingSession session, DateTimeOffset now)
+    public static bool TryValidateFrame(
+        IncomingWsMessage message,
+        TrackingSession session,
+        DateTimeOffset now,
+        out ValidatedFrame frame,
+        out string? problem)
+    {
+        frame = default;
+        problem = Validate(message, session, now);
+        if (problem is not null)
+        {
+            return false;
+        }
+
+        frame = new ValidatedFrame(
+            message.FrameTimestamp ?? now,
+            message.X!.Value,
+            message.Y!.Value,
+            message.Width ?? 0,
+            message.Height ?? 0,
+            message.Fps);
+        return true;
+    }
+
+    /// <summary>Returns null when the frame is usable, otherwise the reason.</summary>
+    private static string? Validate(IncomingWsMessage message, TrackingSession session, DateTimeOffset now)
     {
         if (message.X is null || message.Y is null)
         {

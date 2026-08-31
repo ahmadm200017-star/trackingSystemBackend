@@ -152,7 +152,7 @@ public static class TrackingSocketEndpoints
 
         // Dropped with a reason rather than silently: a device sending out-of-range frames
         // is a bug worth surfacing, and persisting them corrupts every chart for the session.
-        if (IngestValidator.ValidateFrame(message, session, now) is { } problem)
+        if (!IngestValidator.TryValidateFrame(message, session, now, out var frame, out var problem))
         {
             await broadcaster.SendAsync(
                 socket,
@@ -161,30 +161,28 @@ public static class TrackingSocketEndpoints
             return;
         }
 
-        var timestamp = message.FrameTimestamp ?? now;
-
         queue.EnqueueFrame(new SessionFrame
         {
             SessionId = session.Id,
-            FrameTimestamp = timestamp,
-            XCoordinate = message.X.Value,
-            YCoordinate = message.Y.Value,
-            Width = message.Width ?? 0,
-            Height = message.Height ?? 0
+            FrameTimestamp = frame.Timestamp,
+            XCoordinate = frame.X,
+            YCoordinate = frame.Y,
+            Width = frame.Width,
+            Height = frame.Height
         });
 
-        broadcaster.ReportFps(session.Id, message.Fps);
+        broadcaster.ReportFps(session.Id, frame.Fps);
 
         await broadcaster.BroadcastFrameAsync(new LiveFrameMessage
         {
             SessionId = session.Id,
             SessionNumber = session.SessionNumber,
-            FrameTimestamp = timestamp,
-            X = message.X.Value,
-            Y = message.Y.Value,
-            Width = message.Width ?? 0,
-            Height = message.Height ?? 0,
-            Fps = message.Fps
+            FrameTimestamp = frame.Timestamp,
+            X = frame.X,
+            Y = frame.Y,
+            Width = frame.Width,
+            Height = frame.Height,
+            Fps = frame.Fps
         });
     }
 

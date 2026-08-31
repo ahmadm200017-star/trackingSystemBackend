@@ -63,6 +63,7 @@ public class GroqVisionClient
             ["model"] = _options.Model,
             ["temperature"] = _options.Temperature,
             ["max_completion_tokens"] = _options.MaxCompletionTokens,
+            ["stream"] = _options.Stream,
             ["messages"] = new object[]
             {
                 new
@@ -87,6 +88,16 @@ public class GroqVisionClient
             payload["reasoning_effort"] = _options.ReasoningEffort;
         }
 
+        if (_options.TopP is { } topP)
+        {
+            payload["top_p"] = topP;
+        }
+
+        if (!string.IsNullOrWhiteSpace(_options.Stop))
+        {
+            payload["stop"] = _options.Stop;
+        }
+
         using var request = new HttpRequestMessage(HttpMethod.Post, CompletionsPath)
         {
             Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
@@ -96,7 +107,12 @@ public class GroqVisionClient
         HttpResponseMessage response;
         try
         {
-            response = await _http.SendAsync(request, cancellationToken);
+            response = await _http.SendAsync(
+                request,
+                _options.Stream
+                    ? HttpCompletionOption.ResponseHeadersRead
+                    : HttpCompletionOption.ResponseContentRead,
+                cancellationToken);
         }
         catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -109,23 +125,100 @@ public class GroqVisionClient
 
         using (response)
         {
-            var body = await response.Content.ReadAsStringAsync(cancellationToken);
-
             if (!response.IsSuccessStatusCode)
             {
-                // The key is never in the body, but the body can be long; log it once and
-                // hand the caller a short reason.
-                _logger.LogWarning("Groq returned {Status}: {Body}", (int)response.StatusCode, body);
-                throw new GroqVisionException($"Groq returned {(int)response.StatusCode}: {ErrorMessageOf(body)}");
+                // An error is a normal JSON body even when streaming was requested, so it is
+                // safe to read whole. The key is never in it, but it can be long - log once
+                // and hand the caller a short reason. A 429 arrives here too, carrying Groq's
+                // own "try again in Ns" text.
+                var error = await response.Content.ReadAsStringAsync(cancellationToken);
+                _logger.LogWarning("Groq returned {Status}: {Body}", (int)response.StatusCode, error);
+                throw new GroqVisionException($"Groq returned {(int)response.StatusCode}: {ErrorMessageOf(error)}");
             }
 
-            var description = ContentOf(body);
+            var description = _options.Stream
+                ? await ReadStreamedContentAsync(response, cancellationToken)
+                : ContentOf(await response.Content.ReadAsStringAsync(cancellationToken));
+
             if (string.IsNullOrWhiteSpace(description))
             {
                 throw new GroqVisionException("Groq returned an empty description.");
             }
 
             return Trim(description);
+        }
+    }
+
+    /// <summary>
+    /// Reassembles a server-sent event stream into the finished text.
+    ///
+    /// Groq emits one `data: {...}` line per token carrying choices[0].delta.content, then
+    /// a final `data: [DONE]`. The caller needs the whole string to store it, so the deltas
+    /// are concatenated rather than surfaced incrementally.
+    /// </summary>
+    private static async Task<string> ReadStreamedContentAsync(
+        HttpResponseMessage response,
+        CancellationToken cancellationToken)
+    {
+        const string dataPrefix = "data:";
+        const string doneMarker = "[DONE]";
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var reader = new StreamReader(stream);
+        var builder = new StringBuilder();
+
+        while (await reader.ReadLineAsync(cancellationToken) is { } line)
+        {
+            if (!line.StartsWith(dataPrefix, StringComparison.Ordinal))
+            {
+                // Blank separator lines, and any comment lines a proxy might inject.
+                continue;
+            }
+
+            var data = line[dataPrefix.Length..].Trim();
+            if (data.Length == 0)
+            {
+                continue;
+            }
+
+            if (data == doneMarker)
+            {
+                break;
+            }
+
+            builder.Append(DeltaOf(data));
+        }
+
+        return builder.ToString();
+    }
+
+    /// <summary>
+    /// choices[0].delta.content from one chunk, or empty. A malformed chunk is skipped
+    /// rather than failing the whole description - the first chunk carries only the role,
+    /// and the last may carry only a finish_reason.
+    /// </summary>
+    private static string DeltaOf(string chunk)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(chunk);
+            if (!document.RootElement.TryGetProperty("choices", out var choices) ||
+                choices.GetArrayLength() == 0)
+            {
+                return string.Empty;
+            }
+
+            if (!choices[0].TryGetProperty("delta", out var delta) ||
+                !delta.TryGetProperty("content", out var content))
+            {
+                return string.Empty;
+            }
+
+            return content.GetString() ?? string.Empty;
+        }
+        catch (JsonException)
+        {
+            return string.Empty;
         }
     }
 
