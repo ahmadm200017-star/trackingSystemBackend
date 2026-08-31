@@ -23,6 +23,7 @@ public class HealthController : ControllerBase
         Endpoints = new List<string>
         {
             "POST   /api/sessions",
+            "POST   /api/sessions/{id}/description",
             "POST   /api/sessions/{id}/end",
             "GET    /api/sessions?page=1&perPage=20&status=&trackerAlgorithm=&cameraType=&isSuccessful=&search=",
             "GET    /api/sessions/{id}",
