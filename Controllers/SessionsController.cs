@@ -5,6 +5,7 @@ using MdfTracker.Api.Requests;
 using MdfTracker.Api.Responses;
 using MdfTracker.Api.Services;
 using MdfTracker.Api.Services.Vision;
+using MdfTracker.Api.Validation;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -50,9 +51,9 @@ public class SessionsController : ControllerBase
             TrackerAlgorithm = request.TrackerAlgorithm!.Value,
             Status = SessionStatus.Active,
             IsSuccessful = false,
-            DeviceModel = Blank(request.DeviceModel),
-            OsVersion = Blank(request.OsVersion),
-            AppVersion = Blank(request.AppVersion),
+            DeviceModel = InputSanitizer.Clean(request.DeviceModel, 120),
+            OsVersion = InputSanitizer.Clean(request.OsVersion, 60),
+            AppVersion = InputSanitizer.Clean(request.AppVersion, 30),
             ProcessingScale = request.ProcessingScale.HasValue
                 ? Math.Round(request.ProcessingScale.Value, 2)
                 : null,
@@ -84,7 +85,28 @@ public class SessionsController : ControllerBase
             return Conflict(new MessageResponse("Session is already completed."));
         }
 
-        session.EndTime = request.EndTime ?? DateTimeOffset.UtcNow;
+        var endTime = request.EndTime ?? DateTimeOffset.UtcNow;
+
+        // Checked here rather than on the DTO because it needs the stored start time.
+        // Without it a client could close a session "before" it opened, and the API would
+        // then report a negative durationSeconds to every dashboard.
+        if (endTime < session.StartTime)
+        {
+            return BadRequest(new MessageResponse("endTime cannot be before the session start time."));
+        }
+
+        if (endTime - session.StartTime > TrackingLimits.MaxSessionDuration)
+        {
+            return BadRequest(new MessageResponse(
+                $"endTime implies a session longer than {TrackingLimits.MaxSessionDuration.TotalHours:0} hours."));
+        }
+
+        if (endTime > DateTimeOffset.UtcNow + TrackingLimits.ClockSkewTolerance)
+        {
+            return BadRequest(new MessageResponse("endTime cannot be in the future."));
+        }
+
+        session.EndTime = endTime;
         session.AverageFps = request.AverageFps.HasValue ? Math.Round(request.AverageFps.Value, 2) : null;
         session.IsSuccessful = request.IsSuccessful ?? false;
         session.Status = SessionStatus.Completed;
@@ -134,18 +156,32 @@ public class SessionsController : ControllerBase
         }
 
         var image = StripDataUrl(request.ImageBase64!);
-        if (!IsBase64(image))
+        if (!TryDecodeBase64(image, out var bytes))
         {
             return BadRequest(new MessageResponse("imageBase64 is not valid base64."));
         }
 
+        if (bytes.Length > TrackingLimits.MaxImageBytes)
+        {
+            return BadRequest(new MessageResponse(
+                $"The decoded image must be under {TrackingLimits.MaxImageBytes / (1024 * 1024)} MB."));
+        }
+
+        var kind = ImagePayload.Identify(bytes);
+        if (kind == ImagePayload.Kind.Unknown)
+        {
+            return BadRequest(new MessageResponse(
+                "imageBase64 is not a JPEG, PNG or WebP image."));
+        }
+
+        // The real format wins over the declared one, so a mislabelled upload still works
+        // rather than being handed to Groq under a mime type that contradicts its bytes.
+        var mimeType = ImagePayload.MimeTypeOf(kind);
+
         string description;
         try
         {
-            description = await _vision.DescribeAsync(
-                image,
-                request.MimeType ?? "image/jpeg",
-                cancellationToken);
+            description = await _vision.DescribeAsync(image, mimeType, cancellationToken);
         }
         catch (GroqVisionException error)
         {
@@ -342,10 +378,6 @@ public class SessionsController : ControllerBase
 
     // ---------- helpers ----------
 
-    /// <summary>Empty strings from the device are stored as null, not as blanks.</summary>
-    private static string? Blank(string? value) =>
-        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-
     /// <summary>Accepts either raw base64 or a full <c>data:image/...;base64,</c> URL.</summary>
     private static string StripDataUrl(string value)
     {
@@ -359,9 +391,27 @@ public class SessionsController : ControllerBase
         return comma >= 0 ? trimmed[(comma + 1)..] : trimmed;
     }
 
-    /// <summary>Checked here so a malformed upload is a 400 rather than a Groq round trip.</summary>
-    private static bool IsBase64(string value) =>
-        value.Length > 0 && Convert.TryFromBase64String(value, new Span<byte>(new byte[value.Length]), out _);
+    /// <summary>
+    /// Decodes once, so the same pass rejects malformed base64 and yields the bytes the
+    /// signature check needs. Keeps a bad upload to a 400 instead of a Groq round trip.
+    /// </summary>
+    private static bool TryDecodeBase64(string value, out byte[] bytes)
+    {
+        bytes = Array.Empty<byte>();
+        if (value.Length == 0)
+        {
+            return false;
+        }
+
+        var buffer = new byte[(value.Length / 4 + 1) * 3];
+        if (!Convert.TryFromBase64String(value, buffer, out var written) || written == 0)
+        {
+            return false;
+        }
+
+        bytes = buffer[..written];
+        return true;
+    }
 
     private static List<SessionFrame> Downsample(List<SessionFrame> frames, int maxPoints)
     {

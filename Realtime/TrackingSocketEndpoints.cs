@@ -4,6 +4,7 @@ using System.Text.Json;
 using MdfTracker.Api.Data;
 using MdfTracker.Api.Responses;
 using MdfTracker.Api.Models;
+using MdfTracker.Api.Validation;
 using Microsoft.EntityFrameworkCore;
 
 namespace MdfTracker.Api.Realtime;
@@ -104,7 +105,7 @@ public static class TrackingSocketEndpoints
                 switch (message?.Type?.ToLowerInvariant())
                 {
                     case "frame":
-                        await HandleFrameAsync(message, session, queue, broadcaster, context.RequestAborted);
+                        await HandleFrameAsync(message, session, queue, broadcaster, socket, context.RequestAborted);
                         break;
 
                     case "status":
@@ -144,14 +145,23 @@ public static class TrackingSocketEndpoints
         TrackingSession session,
         FrameQueue queue,
         TrackingBroadcaster broadcaster,
+        WebSocket socket,
         CancellationToken cancellationToken)
     {
-        if (message.X is null || message.Y is null)
+        var now = DateTimeOffset.UtcNow;
+
+        // Dropped with a reason rather than silently: a device sending out-of-range frames
+        // is a bug worth surfacing, and persisting them corrupts every chart for the session.
+        if (IngestValidator.ValidateFrame(message, session, now) is { } problem)
         {
+            await broadcaster.SendAsync(
+                socket,
+                new { type = "error", message = problem },
+                cancellationToken);
             return;
         }
 
-        var timestamp = message.FrameTimestamp ?? DateTimeOffset.UtcNow;
+        var timestamp = message.FrameTimestamp ?? now;
 
         queue.EnqueueFrame(new SessionFrame
         {
@@ -195,7 +205,18 @@ public static class TrackingSocketEndpoints
             return;
         }
 
-        var occurredAt = message.OccurredAt ?? DateTimeOffset.UtcNow;
+        var now = DateTimeOffset.UtcNow;
+
+        if (IngestValidator.ValidateStatus(message, session, now) is { } problem)
+        {
+            await broadcaster.SendAsync(
+                socket,
+                new { type = "error", message = problem },
+                cancellationToken);
+            return;
+        }
+
+        var occurredAt = message.OccurredAt ?? now;
 
         queue.EnqueueEvent(new SessionEvent
         {

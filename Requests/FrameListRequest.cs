@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using MdfTracker.Api.Validation;
 
 namespace MdfTracker.Api.Requests;
 
@@ -19,9 +20,10 @@ public class FrameListRequest
 
     public bool Ascending => string.Equals(Sort, "asc", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>Page is capped for the same overflow reason as <see cref="SessionListRequest"/>.</summary>
     public void Normalize()
     {
-        Page = Page < 1 ? 1 : Page;
+        Page = Math.Clamp(Page, 1, TrackingLimits.MaxPage);
         PerPage = Math.Clamp(PerPage, 1, MaxPerPage);
     }
 }

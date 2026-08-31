@@ -1,10 +1,11 @@
 using System.ComponentModel.DataAnnotations;
 using MdfTracker.Api.Models;
+using MdfTracker.Api.Validation;
 
 namespace MdfTracker.Api.Requests;
 
 /// <summary>Body of <c>POST /api/sessions</c>, sent by the mobile app when tracking starts.</summary>
-public class CreateSessionRequest
+public class CreateSessionRequest : IValidatableObject
 {
     [Required(ErrorMessage = "cameraType is required ('front' or 'back').")]
     public CameraType? CameraType { get; set; }
@@ -35,4 +36,23 @@ public class CreateSessionRequest
 
     [Range(0, 20000, ErrorMessage = "screenHeight must be between 0 and 20000.")]
     public int? ScreenHeight { get; set; }
+
+    /// <summary>
+    /// A start time far from server time is rejected rather than stored. Every dashboard
+    /// chart plots offsets from start_time, so a year-1900 or year-3000 value does not just
+    /// look odd - it stretches the time axis until the real data is a single pixel.
+    /// </summary>
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if (StartTime is { } start)
+        {
+            var drift = (start - DateTimeOffset.UtcNow).Duration();
+            if (drift > TrackingLimits.MaxSessionTimeDrift)
+            {
+                yield return new ValidationResult(
+                    $"startTime must be within {TrackingLimits.MaxSessionTimeDrift.TotalDays:0} days of server time.",
+                    new[] { nameof(StartTime) });
+            }
+        }
+    }
 }
