@@ -21,12 +21,16 @@ public class GroqOptions
     public string Model { get; set; } = "qwen/qwen3.8-27b";
 
     /// <summary>
-    /// Matches Groq's own example for this model. Far more than a one-sentence description
-    /// needs - the observed completion is about 5 tokens - so it acts as a ceiling, not a
-    /// target. Worth lowering if the account's tokens-per-minute limit becomes the
-    /// constraint, since the reservation counts against it.
+    /// Deliberately small. A description is one short sentence - measured completions are
+    /// 8 to 9 tokens - and the value counts against the account's tokens-per-minute limit
+    /// as a reservation, not as tokens actually used.
+    ///
+    /// That matters on the free tier's 8,000 TPM: at 2048 each call reserved roughly
+    /// 1,350 prompt + 2,048 completion, so barely two descriptions fitted in a minute and
+    /// the third was rate limited. At 96 it is about 1,450 a call, or five to six a minute.
+    /// Groq's published example uses 2048; that is a playground default, not a requirement.
     /// </summary>
-    public int MaxCompletionTokens { get; set; } = 2048;
+    public int MaxCompletionTokens { get; set; } = 96;
 
     public double Temperature { get; set; } = 0.6;
 
