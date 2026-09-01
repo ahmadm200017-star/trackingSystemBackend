@@ -123,7 +123,9 @@ public class SessionsController : ControllerBase
         var stats = await StatsAsync(new[] { session.Id }, cancellationToken);
         var response = SessionResponse.From(session, StatsOf(stats, session.Id));
 
-        _broadcaster.RemoveMobile(session.Id);
+        // Forget rather than just disconnect: the session is closed, so the reaper has no
+        // further interest in it and its last-seen entry would otherwise linger.
+        _broadcaster.ForgetSession(session.Id);
         await _broadcaster.BroadcastSessionEndedAsync(response);
 
         return Ok(response);

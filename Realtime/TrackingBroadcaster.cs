@@ -19,6 +19,15 @@ public class TrackingBroadcaster
     private readonly IHubContext<TrackingHub, ITrackingClient> _hub;
     private readonly ConcurrentDictionary<string, byte> _dashboards = new();
     private readonly ConcurrentDictionary<Guid, MobileConnection> _mobiles = new();
+
+    /// <summary>
+    /// When each session's device was last connected. Deliberately kept after the socket is
+    /// removed, because that is exactly the moment the reaper needs to measure from: without
+    /// it, a disconnected session is indistinguishable from one that never connected.
+    ///
+    /// Entries are dropped when the session is closed, so this cannot grow without bound.
+    /// </summary>
+    private readonly ConcurrentDictionary<Guid, DateTimeOffset> _lastSeen = new();
     private readonly JsonSerializerOptions _json = JsonConfig.Options;
 
     public TrackingBroadcaster(IHubContext<TrackingHub, ITrackingClient> hub)
@@ -38,10 +47,37 @@ public class TrackingBroadcaster
 
     public void DashboardDisconnected(string connectionId) => _dashboards.TryRemove(connectionId, out _);
 
-    public void AddMobile(Guid sessionId, string sessionNumber) =>
+    public void AddMobile(Guid sessionId, string sessionNumber)
+    {
         _mobiles[sessionId] = new MobileConnection(sessionId, sessionNumber);
+        _lastSeen[sessionId] = DateTimeOffset.UtcNow;
+    }
 
-    public void RemoveMobile(Guid sessionId) => _mobiles.TryRemove(sessionId, out _);
+    public void RemoveMobile(Guid sessionId)
+    {
+        _mobiles.TryRemove(sessionId, out _);
+        // Stamped on the way out, not on the way in, so the gap is measured from the
+        // disconnect rather than from the start of a long healthy stream.
+        _lastSeen[sessionId] = DateTimeOffset.UtcNow;
+    }
+
+    /// <summary>True while a device is streaming this session.</summary>
+    public bool IsStreaming(Guid sessionId) => _mobiles.ContainsKey(sessionId);
+
+    /// <summary>
+    /// When this session's device was last connected, or null if it never has been - which
+    /// is the normal state for the moment between creating a session over REST and the
+    /// socket handshake landing.
+    /// </summary>
+    public DateTimeOffset? LastSeen(Guid sessionId) =>
+        _lastSeen.TryGetValue(sessionId, out var seen) ? seen : null;
+
+    /// <summary>Called once a session is closed; nothing needs to track it any more.</summary>
+    public void ForgetSession(Guid sessionId)
+    {
+        _mobiles.TryRemove(sessionId, out _);
+        _lastSeen.TryRemove(sessionId, out _);
+    }
 
     public void ReportFps(Guid sessionId, double? fps)
     {

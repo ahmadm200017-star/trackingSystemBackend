@@ -42,6 +42,12 @@ public class SessionResponse
 
     public bool IsSuccessful { get; set; }
 
+    /// <summary>
+    /// The server closed this session because the device stopped talking, rather than the
+    /// app reporting a summary. The dashboard shows it as a lost connection.
+    /// </summary>
+    public bool AutoClosed { get; set; }
+
     /// <summary>Whether inertial sensors were used to stabilise the tracker during this run.</summary>
     public bool ImuEnabled { get; set; }
 
@@ -95,6 +101,7 @@ public class SessionResponse
             MaxFps = aggregate.MaxFps,
             Status = session.Status,
             IsSuccessful = session.IsSuccessful,
+            AutoClosed = session.AutoClosed,
             ImuEnabled = session.ImuEnabled,
             ObjectDescription = session.ObjectDescription,
             Latitude = session.Latitude,

@@ -28,6 +28,14 @@ public class TrackingSession
     public string? ObjectDescription { get; set; }
 
     /// <summary>
+    /// True when the server closed this session because its device stopped talking, rather
+    /// than the app posting a summary. Keeps "the connection died" distinguishable from
+    /// "the user stopped while the target was lost" - both leave is_successful false, but
+    /// only one of them is a fault worth showing differently on the dashboard.
+    /// </summary>
+    public bool AutoClosed { get; set; }
+
+    /// <summary>
     /// Whether the run used inertial sensors to compensate for handset movement. Always
     /// false today - IMU integration is not implemented - but recorded per session so the
     /// dashboard reports the state of the run rather than a hard-coded label.

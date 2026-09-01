@@ -43,6 +43,12 @@ builder.Services.AddSingleton<FrameQueue>();
 builder.Services.AddSingleton<TrackingBroadcaster>();
 builder.Services.AddHostedService<FrameWriterService>();
 
+// Sessions whose device stops talking are closed by the server, so the live room and the
+// session list cannot show a run that ended when the app was killed as still active.
+builder.Services.Configure<SessionReaperOptions>(
+    builder.Configuration.GetSection(SessionReaperOptions.SectionName));
+builder.Services.AddHostedService<StaleSessionReaper>();
+
 builder.Services.AddScoped<SessionNumberGenerator>();
 
 // Object description: the Groq key lives here, never on the device. Without it the
@@ -121,7 +127,9 @@ using (var scope = app.Services.CreateScope())
           IF COL_LENGTH('tracking_sessions', 'imu_enabled') IS NULL
               ALTER TABLE tracking_sessions ADD imu_enabled BIT NOT NULL CONSTRAINT df_tracking_sessions_imu_enabled DEFAULT 0;
           IF COL_LENGTH('session_frames', 'fps') IS NULL
-              ALTER TABLE session_frames ADD fps DECIMAL(6,2) NULL;");
+              ALTER TABLE session_frames ADD fps DECIMAL(6,2) NULL;
+          IF COL_LENGTH('tracking_sessions', 'auto_closed') IS NULL
+              ALTER TABLE tracking_sessions ADD auto_closed BIT NOT NULL CONSTRAINT df_tracking_sessions_auto_closed DEFAULT 0;");
 }
 
 app.Run();
