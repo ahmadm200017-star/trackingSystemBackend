@@ -10,7 +10,7 @@ public class CreateSessionRequest : IValidatableObject
     [Required(ErrorMessage = "cameraType is required ('front' or 'back').")]
     public CameraType? CameraType { get; set; }
 
-    [Required(ErrorMessage = "trackerAlgorithm is required ('csrt' or 'kcf').")]
+    [Required(ErrorMessage = "trackerAlgorithm is required ('csrt', 'kcf' or 'mil').")]
     public TrackerAlgorithm? TrackerAlgorithm { get; set; }
 
     /// <summary>Defaults to server time when omitted.</summary>
