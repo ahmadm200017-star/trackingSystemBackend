@@ -36,6 +36,7 @@ public class AppDbContext : DbContext
             entity.Property(e => e.Status).HasColumnName("status").HasConversion(EnumConverters.SessionStatus).HasMaxLength(10).IsRequired();
             entity.Property(e => e.IsSuccessful).HasColumnName("is_successful").IsRequired();
             entity.Property(e => e.ObjectDescription).HasColumnName("object_description").HasMaxLength(500);
+            entity.Property(e => e.ImuEnabled).HasColumnName("imu_enabled").IsRequired();
             entity.Property(e => e.Latitude).HasColumnName("latitude").HasPrecision(9, 6);
             entity.Property(e => e.Longitude).HasColumnName("longitude").HasPrecision(9, 6);
             entity.Property(e => e.LocationAccuracyMeters).HasColumnName("location_accuracy_m").HasPrecision(8, 2);
@@ -64,6 +65,7 @@ public class AppDbContext : DbContext
             entity.Property(e => e.YCoordinate).HasColumnName("y_coordinate").IsRequired();
             entity.Property(e => e.Width).HasColumnName("width").IsRequired();
             entity.Property(e => e.Height).HasColumnName("height").IsRequired();
+            entity.Property(e => e.Fps).HasColumnName("fps").HasPrecision(6, 2);
 
             entity.HasOne(e => e.Session)
                 .WithMany(s => s.Frames)

@@ -97,6 +97,34 @@ public static class IngestValidator
         return ValidateTimestamp(message.FrameTimestamp, session, now, "frame.frameTimestamp");
     }
 
+    /// <summary>
+    /// Same bounds as a socket frame, for the REST ingest path. Kept here rather than
+    /// duplicated in the controller so the two entry points cannot drift apart - which was
+    /// the whole reason the socket went unvalidated for so long.
+    /// </summary>
+    public static string? ValidateRestPoint(
+        DateTimeOffset timestamp,
+        int x,
+        int y,
+        int? width,
+        int? height,
+        decimal? fps,
+        TrackingSession session,
+        DateTimeOffset now)
+    {
+        var message = new IncomingWsMessage
+        {
+            FrameTimestamp = timestamp,
+            X = x,
+            Y = y,
+            Width = width,
+            Height = height,
+            Fps = fps.HasValue ? (double)fps.Value : null
+        };
+
+        return Validate(message, session, now);
+    }
+
     /// <summary>Returns null when the status event is usable, otherwise the reason.</summary>
     public static string? ValidateStatus(IncomingWsMessage message, TrackingSession session, DateTimeOffset now) =>
         ValidateTimestamp(message.OccurredAt, session, now, "status.occurredAt");

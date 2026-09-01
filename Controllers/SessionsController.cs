@@ -51,6 +51,7 @@ public class SessionsController : ControllerBase
             TrackerAlgorithm = request.TrackerAlgorithm!.Value,
             Status = SessionStatus.Active,
             IsSuccessful = false,
+            ImuEnabled = request.ImuEnabled ?? false,
             Latitude = request.Latitude,
             Longitude = request.Longitude,
             LocationAccuracyMeters = request.LocationAccuracyMeters.HasValue
@@ -77,6 +78,7 @@ public class SessionsController : ControllerBase
 
     /// <summary>Close a session with its summary: average FPS and whether tracking held.</summary>
     [HttpPost("{id:guid}/end")]
+    [HttpPost("{id:guid}/finish")]
     public async Task<ActionResult<SessionResponse>> End(Guid id, EndSessionRequest request, CancellationToken cancellationToken)
     {
         var session = await _db.TrackingSessions.FirstOrDefaultAsync(s => s.Id == id, cancellationToken);
@@ -118,8 +120,8 @@ public class SessionsController : ControllerBase
 
         await _db.SaveChangesAsync(cancellationToken);
 
-        var counts = await CountsAsync(new[] { session.Id }, cancellationToken);
-        var response = SessionResponse.From(session, FrameCountOf(counts, session.Id), LostCountOf(counts, session.Id));
+        var stats = await StatsAsync(new[] { session.Id }, cancellationToken);
+        var response = SessionResponse.From(session, StatsOf(stats, session.Id));
 
         _broadcaster.RemoveMobile(session.Id);
         await _broadcaster.BroadcastSessionEndedAsync(response);
@@ -197,12 +199,191 @@ public class SessionsController : ControllerBase
         session.ObjectDescription = description;
         await _db.SaveChangesAsync(cancellationToken);
 
-        var counts = await CountsAsync(new[] { id }, cancellationToken);
-        var response = SessionResponse.From(session, FrameCountOf(counts, id), LostCountOf(counts, id));
+        var stats = await StatsAsync(new[] { id }, cancellationToken);
+        var response = SessionResponse.From(session, StatsOf(stats, id));
 
         await _broadcaster.BroadcastSessionDescribedAsync(response);
 
         return Ok(response);
+    }
+
+    /// <summary>
+    /// REST ingest for tracking data, accepting one point or a batch. The app streams over
+    /// the socket instead - far cheaper per point - but this exists so the ingest contract
+    /// can be driven with nothing but curl.
+    ///
+    /// Re-sending the same data is safe: a point identical to one already stored for this
+    /// session is counted as a duplicate and skipped rather than written twice, so a client
+    /// that retries after a timeout cannot corrupt the series.
+    /// </summary>
+    [HttpPost("{id:guid}/data")]
+    public async Task<ActionResult<SessionDataIngestResponse>> AddData(
+        Guid id,
+        SessionDataRequest request,
+        CancellationToken cancellationToken)
+    {
+        var session = await _db.TrackingSessions.AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == id, cancellationToken);
+
+        if (session is null)
+        {
+            return NotFound(new MessageResponse("Session not found."));
+        }
+
+        if (session.Status == SessionStatus.Completed)
+        {
+            return Conflict(new MessageResponse("Session is already completed; it accepts no more data."));
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var points = request.AsPoints();
+
+        // Existing points for this session, so a retry of the same payload is recognised.
+        // Compared on the whole tuple rather than the timestamp alone: at 30 fps two frames
+        // can share a millisecond, and rejecting the second would lose real data.
+        var existing = (await _db.SessionFrames.AsNoTracking()
+                .Where(f => f.SessionId == id)
+                .Select(f => new { f.FrameTimestamp, f.XCoordinate, f.YCoordinate, f.Width, f.Height })
+                .ToListAsync(cancellationToken))
+            .Select(f => (f.FrameTimestamp, f.XCoordinate, f.YCoordinate, f.Width, f.Height))
+            .ToHashSet();
+
+        var frames = new List<SessionFrame>();
+        var events = new List<SessionEvent>();
+        var duplicates = 0;
+
+        foreach (var point in points)
+        {
+            var timestamp = point.Timestamp ?? now;
+
+            if (IngestValidator.ValidateRestPoint(
+                    timestamp, point.X!.Value, point.Y!.Value, point.Width, point.Height,
+                    point.Fps, session, now) is { } problem)
+            {
+                return BadRequest(new MessageResponse(problem));
+            }
+
+            var width = point.Width ?? 0;
+            var height = point.Height ?? 0;
+            var key = (timestamp, point.X!.Value, point.Y!.Value, width, height);
+
+            // Also catches duplicates inside a single batch, not just against the database.
+            if (!existing.Add(key))
+            {
+                duplicates++;
+                continue;
+            }
+
+            frames.Add(new SessionFrame
+            {
+                SessionId = id,
+                FrameTimestamp = timestamp,
+                XCoordinate = point.X!.Value,
+                YCoordinate = point.Y!.Value,
+                Width = width,
+                Height = height,
+                Fps = point.Fps.HasValue ? Math.Round(point.Fps.Value, 2) : null
+            });
+
+            if (point.State is { Length: > 0 } state &&
+                Enum.TryParse<SessionEventType>(state, ignoreCase: true, out var eventType))
+            {
+                events.Add(new SessionEvent
+                {
+                    SessionId = id,
+                    EventType = eventType,
+                    OccurredAt = timestamp
+                });
+            }
+        }
+
+        if (frames.Count > 0)
+        {
+            _db.SessionFrames.AddRange(frames);
+        }
+
+        if (events.Count > 0)
+        {
+            _db.SessionEvents.AddRange(events);
+        }
+
+        if (frames.Count > 0 || events.Count > 0)
+        {
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+
+        // Relayed to dashboards so REST ingest shows up live exactly like the socket does.
+        foreach (var frame in frames)
+        {
+            _broadcaster.ReportFps(id, frame.Fps.HasValue ? (double)frame.Fps.Value : null);
+            await _broadcaster.BroadcastFrameAsync(new LiveFrameMessage
+            {
+                SessionId = id,
+                SessionNumber = session.SessionNumber,
+                FrameTimestamp = frame.FrameTimestamp,
+                X = frame.XCoordinate,
+                Y = frame.YCoordinate,
+                Width = frame.Width,
+                Height = frame.Height,
+                Fps = frame.Fps.HasValue ? (double)frame.Fps.Value : null
+            });
+        }
+
+        foreach (var sessionEvent in events)
+        {
+            await _broadcaster.BroadcastStatusAsync(new LiveStatusMessage
+            {
+                SessionId = id,
+                SessionNumber = session.SessionNumber,
+                State = sessionEvent.EventType,
+                OccurredAt = sessionEvent.OccurredAt
+            });
+        }
+
+        return Ok(new SessionDataIngestResponse
+        {
+            SessionId = id,
+            Accepted = frames.Count,
+            Duplicates = duplicates,
+            Events = events.Count,
+            TotalFrames = await _db.SessionFrames.CountAsync(f => f.SessionId == id, cancellationToken)
+        });
+    }
+
+    /// <summary>
+    /// Target position and FPS ordered by time. Same data as <c>/frames</c> but always
+    /// chronological and without paging, which is the shape a chart wants.
+    /// </summary>
+    [HttpGet("{id:guid}/data")]
+    public async Task<ActionResult<List<FrameResponse>>> Data(
+        Guid id,
+        CancellationToken cancellationToken,
+        [FromQuery] int limit = 50_000)
+    {
+        if (!await _db.TrackingSessions.AnyAsync(s => s.Id == id, cancellationToken))
+        {
+            return NotFound(new MessageResponse("Session not found."));
+        }
+
+        limit = Math.Clamp(limit, 1, 50_000);
+
+        var data = await _db.SessionFrames.AsNoTracking()
+            .Where(f => f.SessionId == id)
+            .OrderBy(f => f.FrameTimestamp)
+            .Take(limit)
+            .Select(f => new FrameResponse
+            {
+                Id = f.Id,
+                FrameTimestamp = f.FrameTimestamp,
+                X = f.XCoordinate,
+                Y = f.YCoordinate,
+                Width = f.Width,
+                Height = f.Height,
+                Fps = f.Fps
+            })
+            .ToListAsync(cancellationToken);
+
+        return Ok(data);
     }
 
     /// <summary>Session history, newest first.</summary>
@@ -249,10 +430,10 @@ public class SessionsController : ControllerBase
             .Take(request.PerPage)
             .ToListAsync(cancellationToken);
 
-        var counts = await CountsAsync(sessions.Select(s => s.Id).ToList(), cancellationToken);
+        var stats = await StatsAsync(sessions.Select(s => s.Id).ToList(), cancellationToken);
 
         var data = sessions
-            .Select(s => SessionResponse.From(s, FrameCountOf(counts, s.Id), LostCountOf(counts, s.Id)))
+            .Select(s => SessionResponse.From(s, StatsOf(stats, s.Id)))
             .ToList();
 
         return Ok(PagedResponse<SessionResponse>.Create(data, request.Page, request.PerPage, total));
@@ -267,8 +448,8 @@ public class SessionsController : ControllerBase
             return NotFound(new MessageResponse("Session not found."));
         }
 
-        var counts = await CountsAsync(new[] { id }, cancellationToken);
-        return Ok(SessionResponse.From(session, FrameCountOf(counts, id), LostCountOf(counts, id)));
+        var stats = await StatsAsync(new[] { id }, cancellationToken);
+        return Ok(SessionResponse.From(session, StatsOf(stats, id)));
     }
 
     /// <summary>Frames, newest first by default; charts ask for sort=asc.</summary>
@@ -302,7 +483,8 @@ public class SessionsController : ControllerBase
                 X = f.XCoordinate,
                 Y = f.YCoordinate,
                 Width = f.Width,
-                Height = f.Height
+                Height = f.Height,
+                Fps = f.Fps
             })
             .ToListAsync(cancellationToken);
 
@@ -359,10 +541,19 @@ public class SessionsController : ControllerBase
 
         var lostCount = events.Count(e => e.EventType == SessionEventType.Lost);
 
-        // Charts stay responsive on long sessions: keep an even stride of frames.
+        // Charts stay responsive on long sessions: keep an even stride of frames. The FPS
+        // range is taken from every frame, not the sampled subset, so the reported minimum
+        // and maximum are the real ones rather than whichever the stride happened to keep.
+        var reported = frames.Where(f => f.Fps.HasValue).Select(f => f.Fps!.Value).ToList();
+        var stats = new SessionFrameStats(
+            frames.Count,
+            lostCount,
+            reported.Count > 0 ? reported.Min() : null,
+            reported.Count > 0 ? reported.Max() : null);
+
         var sampled = Downsample(frames, maxPoints);
 
-        return Ok(AnalyticsBuilder.Build(session, sampled, events, frames.Count, lostCount));
+        return Ok(AnalyticsBuilder.Build(session, sampled, events, stats));
     }
 
     /// <summary>Deletes the session together with its frames and events.</summary>
@@ -441,21 +632,32 @@ public class SessionsController : ControllerBase
         return sampled;
     }
 
-    private record SessionCounts(int FrameCount, int LostCount);
-
-    private async Task<Dictionary<Guid, SessionCounts>> CountsAsync(
+    /// <summary>
+    /// Frame count, lost count and the FPS range for each of <paramref name="ids"/>, in two
+    /// grouped queries regardless of how many sessions are asked for.
+    /// </summary>
+    private async Task<Dictionary<Guid, SessionFrameStats>> StatsAsync(
         IReadOnlyCollection<Guid> ids,
         CancellationToken cancellationToken)
     {
         if (ids.Count == 0)
         {
-            return new Dictionary<Guid, SessionCounts>();
+            return new Dictionary<Guid, SessionFrameStats>();
         }
 
-        var frameCounts = await _db.SessionFrames.AsNoTracking()
+        var frameStats = await _db.SessionFrames.AsNoTracking()
             .Where(f => ids.Contains(f.SessionId))
             .GroupBy(f => f.SessionId)
-            .Select(g => new { SessionId = g.Key, Count = g.Count() })
+            .Select(g => new
+            {
+                SessionId = g.Key,
+                Count = g.Count(),
+                // Frames stored before fps was persisted are null, and Min/Max over a
+                // nullable column ignores them, so a partially-populated session still
+                // reports the range of what it does have.
+                MinFps = g.Min(f => f.Fps),
+                MaxFps = g.Max(f => f.Fps)
+            })
             .ToListAsync(cancellationToken);
 
         var lostCounts = await _db.SessionEvents.AsNoTracking()
@@ -466,14 +668,14 @@ public class SessionsController : ControllerBase
 
         return ids.ToDictionary(
             id => id,
-            id => new SessionCounts(
-                frameCounts.FirstOrDefault(c => c.SessionId == id)?.Count ?? 0,
-                lostCounts.FirstOrDefault(c => c.SessionId == id)?.Count ?? 0));
+            id =>
+            {
+                var frames = frameStats.FirstOrDefault(c => c.SessionId == id);
+                var lost = lostCounts.FirstOrDefault(c => c.SessionId == id)?.Count ?? 0;
+                return new SessionFrameStats(frames?.Count ?? 0, lost, frames?.MinFps, frames?.MaxFps);
+            });
     }
 
-    private static int FrameCountOf(Dictionary<Guid, SessionCounts> counts, Guid id) =>
-        counts.TryGetValue(id, out var value) ? value.FrameCount : 0;
-
-    private static int LostCountOf(Dictionary<Guid, SessionCounts> counts, Guid id) =>
-        counts.TryGetValue(id, out var value) ? value.LostCount : 0;
+    private static SessionFrameStats StatsOf(Dictionary<Guid, SessionFrameStats> stats, Guid id) =>
+        stats.TryGetValue(id, out var value) ? value : SessionFrameStats.Empty;
 }

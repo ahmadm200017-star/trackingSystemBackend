@@ -19,8 +19,7 @@ public static class AnalyticsBuilder
         TrackingSession session,
         List<SessionFrame> framesAscending,
         List<SessionEvent> eventsAscending,
-        int frameCount,
-        int lostCount)
+        SessionFrameStats stats)
     {
         var start = session.StartTime;
 
@@ -32,7 +31,8 @@ public static class AnalyticsBuilder
                 X = f.XCoordinate,
                 Y = f.YCoordinate,
                 Width = f.Width,
-                Height = f.Height
+                Height = f.Height,
+                Fps = f.Fps
             })
             .ToList();
 
@@ -45,7 +45,7 @@ public static class AnalyticsBuilder
 
         return new SessionAnalyticsResponse
         {
-            Session = SessionResponse.From(session, frameCount, lostCount),
+            Session = SessionResponse.From(session, stats),
             Points = points,
             Drops = drops,
             Events = eventsAscending

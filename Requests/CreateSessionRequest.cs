@@ -16,6 +16,12 @@ public class CreateSessionRequest : IValidatableObject
     /// <summary>Defaults to server time when omitted.</summary>
     public DateTimeOffset? StartTime { get; set; }
 
+    /// <summary>
+    /// Whether the run used inertial sensors to stabilise the tracker. Defaults to false,
+    /// which is the truth today: IMU integration is not implemented.
+    /// </summary>
+    public bool? ImuEnabled { get; set; }
+
     /// <summary>Latitude in decimal degrees. Sent only when a fix was available.</summary>
     [Range(-90, 90, ErrorMessage = "latitude must be between -90 and 90.")]
     public decimal? Latitude { get; set; }

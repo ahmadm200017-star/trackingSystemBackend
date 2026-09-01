@@ -27,6 +27,12 @@ public class AnalyticsPoint
     public int Width { get; set; }
 
     public int Height { get; set; }
+
+    /// <summary>
+    /// Tracker throughput at this frame, so the detail page can plot FPS over time on the
+    /// same axis as the movement series. Null for frames stored before fps was persisted.
+    /// </summary>
+    public decimal? Fps { get; set; }
 }
 
 public class TrackingDrop

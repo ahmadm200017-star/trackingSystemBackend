@@ -28,6 +28,13 @@ public class TrackingSession
     public string? ObjectDescription { get; set; }
 
     /// <summary>
+    /// Whether the run used inertial sensors to compensate for handset movement. Always
+    /// false today - IMU integration is not implemented - but recorded per session so the
+    /// dashboard reports the state of the run rather than a hard-coded label.
+    /// </summary>
+    public bool ImuEnabled { get; set; }
+
+    /// <summary>
     /// Where the run was recorded, in decimal degrees. Null when the device had no fix or
     /// the user declined the location permission - both are normal and neither blocks a
     /// session, so every consumer has to handle the absence.

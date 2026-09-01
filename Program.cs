@@ -1,6 +1,7 @@
 using System.Text.Json;
 using MdfTracker.Api;
 using MdfTracker.Api.Data;
+using MdfTracker.Api.Middleware;
 using MdfTracker.Api.Realtime;
 using MdfTracker.Api.Services;
 using MdfTracker.Api.Services.Vision;
@@ -32,6 +33,9 @@ builder.Services.ConfigureHttpJsonOptions(options => JsonConfig.Apply(options.Se
 // Same JSON contract over the hub as over REST: camelCase, lowercase string enums.
 builder.Services.AddSignalR().AddJsonProtocol(options => JsonConfig.Apply(options.PayloadSerializerOptions));
 
+// A database outage answers 503 with a Retry-After rather than a bare 500, so a device
+// can tell "hold the data and retry" apart from "your request was wrong".
+builder.Services.AddExceptionHandler<DatabaseFailureHandler>();
 builder.Services.AddProblemDetails();
 
 // Write path: sockets enqueue, one background writer persists in batches.
@@ -113,7 +117,11 @@ using (var scope = app.Services.CreateScope())
           IF COL_LENGTH('tracking_sessions', 'longitude') IS NULL
               ALTER TABLE tracking_sessions ADD longitude DECIMAL(9,6) NULL;
           IF COL_LENGTH('tracking_sessions', 'location_accuracy_m') IS NULL
-              ALTER TABLE tracking_sessions ADD location_accuracy_m DECIMAL(8,2) NULL;");
+              ALTER TABLE tracking_sessions ADD location_accuracy_m DECIMAL(8,2) NULL;
+          IF COL_LENGTH('tracking_sessions', 'imu_enabled') IS NULL
+              ALTER TABLE tracking_sessions ADD imu_enabled BIT NOT NULL CONSTRAINT df_tracking_sessions_imu_enabled DEFAULT 0;
+          IF COL_LENGTH('session_frames', 'fps') IS NULL
+              ALTER TABLE session_frames ADD fps DECIMAL(6,2) NULL;");
 }
 
 app.Run();
