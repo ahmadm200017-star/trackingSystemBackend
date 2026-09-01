@@ -23,11 +23,14 @@ public class HealthController : ControllerBase
         Endpoints = new List<string>
         {
             "POST   /api/sessions",
+            "POST   /api/sessions/{id}/data                (one point or a batch; duplicates ignored)",
             "POST   /api/sessions/{id}/description",
             "POST   /api/sessions/{id}/end",
+            "POST   /api/sessions/{id}/finish              (alias of /end)",
             "GET    /api/sessions?page=1&perPage=20&status=&trackerAlgorithm=&cameraType=&isSuccessful=&search=",
             "GET    /api/sessions/{id}",
             "GET    /api/sessions/{id}/frames?page=1&perPage=100&sort=desc",
+            "GET    /api/sessions/{id}/data?limit=50000   (position + fps, time order)",
             "GET    /api/sessions/{id}/events",
             "GET    /api/sessions/{id}/analytics?maxPoints=5000",
             "DELETE /api/sessions/{id}",
