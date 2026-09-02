@@ -25,5 +25,16 @@ public class SessionFrame
     /// </summary>
     public decimal? Fps { get; set; }
 
+    /// <summary>
+    /// Estimated real-world position of the tracked object at this frame, computed on the
+    /// device from its GPS fix, compass heading and this pixel - see the mobile app's
+    /// TargetGeoLocator. An estimate under a ground-plane assumption, not a measurement;
+    /// null on the large majority of frames, since it needs a settled compass reading and a
+    /// camera angle pointed below the horizon.
+    /// </summary>
+    public decimal? TargetLatitude { get; set; }
+
+    public decimal? TargetLongitude { get; set; }
+
     public TrackingSession? Session { get; set; }
 }

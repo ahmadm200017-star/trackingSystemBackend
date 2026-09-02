@@ -67,6 +67,8 @@ public class AppDbContext : DbContext
             entity.Property(e => e.Width).HasColumnName("width").IsRequired();
             entity.Property(e => e.Height).HasColumnName("height").IsRequired();
             entity.Property(e => e.Fps).HasColumnName("fps").HasPrecision(6, 2);
+            entity.Property(e => e.TargetLatitude).HasColumnName("target_latitude").HasPrecision(9, 6);
+            entity.Property(e => e.TargetLongitude).HasColumnName("target_longitude").HasPrecision(9, 6);
 
             entity.HasOne(e => e.Session)
                 .WithMany(s => s.Frames)

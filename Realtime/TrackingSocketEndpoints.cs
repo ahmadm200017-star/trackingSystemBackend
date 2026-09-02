@@ -169,7 +169,9 @@ public static class TrackingSocketEndpoints
             YCoordinate = frame.Y,
             Width = frame.Width,
             Height = frame.Height,
-            Fps = frame.Fps.HasValue ? Math.Round((decimal)frame.Fps.Value, 2) : null
+            Fps = frame.Fps.HasValue ? Math.Round((decimal)frame.Fps.Value, 2) : null,
+            TargetLatitude = frame.TargetLatitude.HasValue ? (decimal)frame.TargetLatitude.Value : null,
+            TargetLongitude = frame.TargetLongitude.HasValue ? (decimal)frame.TargetLongitude.Value : null
         });
 
         broadcaster.ReportFps(session.Id, frame.Fps);
@@ -183,7 +185,9 @@ public static class TrackingSocketEndpoints
             Y = frame.Y,
             Width = frame.Width,
             Height = frame.Height,
-            Fps = frame.Fps
+            Fps = frame.Fps,
+            TargetLatitude = frame.TargetLatitude,
+            TargetLongitude = frame.TargetLongitude
         });
     }
 

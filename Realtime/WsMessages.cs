@@ -20,6 +20,14 @@ public class IncomingWsMessage
 
     public double? Fps { get; set; }
 
+    /// <summary>
+    /// Estimated real-world position of the tracked object, from the device's optional
+    /// target geo-location feature. Only ever stored as a pair.
+    /// </summary>
+    public double? TargetLatitude { get; set; }
+
+    public double? TargetLongitude { get; set; }
+
     /// <summary>For "status" messages: "lost" or "reacquired".</summary>
     public string? State { get; set; }
 
@@ -47,6 +55,10 @@ public class LiveFrameMessage
     public int Height { get; set; }
 
     public double? Fps { get; set; }
+
+    public double? TargetLatitude { get; set; }
+
+    public double? TargetLongitude { get; set; }
 }
 
 public class LiveStatusMessage

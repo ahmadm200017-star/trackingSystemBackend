@@ -129,7 +129,11 @@ using (var scope = app.Services.CreateScope())
           IF COL_LENGTH('session_frames', 'fps') IS NULL
               ALTER TABLE session_frames ADD fps DECIMAL(6,2) NULL;
           IF COL_LENGTH('tracking_sessions', 'auto_closed') IS NULL
-              ALTER TABLE tracking_sessions ADD auto_closed BIT NOT NULL CONSTRAINT df_tracking_sessions_auto_closed DEFAULT 0;");
+              ALTER TABLE tracking_sessions ADD auto_closed BIT NOT NULL CONSTRAINT df_tracking_sessions_auto_closed DEFAULT 0;
+          IF COL_LENGTH('session_frames', 'target_latitude') IS NULL
+              ALTER TABLE session_frames ADD target_latitude DECIMAL(9,6) NULL;
+          IF COL_LENGTH('session_frames', 'target_longitude') IS NULL
+              ALTER TABLE session_frames ADD target_longitude DECIMAL(9,6) NULL;");
 }
 
 app.Run();

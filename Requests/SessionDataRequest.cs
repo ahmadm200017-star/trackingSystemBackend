@@ -35,6 +35,13 @@ public class SessionDataPoint
     [Range(TrackingLimits.MinFps, TrackingLimits.MaxFps, ErrorMessage = "fps must be between 0 and 1000.")]
     public decimal? Fps { get; set; }
 
+    /// <summary>Estimated real-world position of the tracked object; sent only as a pair.</summary>
+    [Range(-90, 90, ErrorMessage = "targetLatitude must be between -90 and 90.")]
+    public decimal? TargetLatitude { get; set; }
+
+    [Range(-180, 180, ErrorMessage = "targetLongitude must be between -180 and 180.")]
+    public decimal? TargetLongitude { get; set; }
+
     /// <summary>
     /// Tracking state at this point: "tracking", "lost" or "reacquired". A state of lost or
     /// reacquired also records a lifecycle event, which is what the dashboard timeline draws
@@ -66,6 +73,10 @@ public class SessionDataRequest : IValidatableObject
 
     public decimal? Fps { get; set; }
 
+    public decimal? TargetLatitude { get; set; }
+
+    public decimal? TargetLongitude { get; set; }
+
     public string? State { get; set; }
 
     /// <summary>
@@ -89,6 +100,8 @@ public class SessionDataRequest : IValidatableObject
                 Width = Width,
                 Height = Height,
                 Fps = Fps,
+                TargetLatitude = TargetLatitude,
+                TargetLongitude = TargetLongitude,
                 State = State
             }
         };
@@ -128,6 +141,13 @@ public class SessionDataRequest : IValidatableObject
                 yield return new ValidationResult(
                     $"{prefix}state must be 'tracking', 'lost' or 'reacquired'.",
                     new[] { $"{prefix}state" });
+            }
+
+            if (point.TargetLatitude.HasValue != point.TargetLongitude.HasValue)
+            {
+                yield return new ValidationResult(
+                    $"{prefix}targetLatitude and {prefix}targetLongitude must be sent together.",
+                    new[] { $"{prefix}targetLatitude", $"{prefix}targetLongitude" });
             }
         }
     }

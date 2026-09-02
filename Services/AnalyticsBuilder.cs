@@ -32,7 +32,9 @@ public static class AnalyticsBuilder
                 Y = f.YCoordinate,
                 Width = f.Width,
                 Height = f.Height,
-                Fps = f.Fps
+                Fps = f.Fps,
+                TargetLatitude = f.TargetLatitude,
+                TargetLongitude = f.TargetLongitude
             })
             .ToList();
 

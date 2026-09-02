@@ -260,7 +260,7 @@ public class SessionsController : ControllerBase
 
             if (IngestValidator.ValidateRestPoint(
                     timestamp, point.X!.Value, point.Y!.Value, point.Width, point.Height,
-                    point.Fps, session, now) is { } problem)
+                    point.Fps, point.TargetLatitude, point.TargetLongitude, session, now) is { } problem)
             {
                 return BadRequest(new MessageResponse(problem));
             }
@@ -284,7 +284,9 @@ public class SessionsController : ControllerBase
                 YCoordinate = point.Y!.Value,
                 Width = width,
                 Height = height,
-                Fps = point.Fps.HasValue ? Math.Round(point.Fps.Value, 2) : null
+                Fps = point.Fps.HasValue ? Math.Round(point.Fps.Value, 2) : null,
+                TargetLatitude = point.TargetLatitude,
+                TargetLongitude = point.TargetLongitude
             });
 
             if (point.State is { Length: > 0 } state &&
@@ -327,7 +329,9 @@ public class SessionsController : ControllerBase
                 Y = frame.YCoordinate,
                 Width = frame.Width,
                 Height = frame.Height,
-                Fps = frame.Fps.HasValue ? (double)frame.Fps.Value : null
+                Fps = frame.Fps.HasValue ? (double)frame.Fps.Value : null,
+                TargetLatitude = frame.TargetLatitude.HasValue ? (double)frame.TargetLatitude.Value : null,
+                TargetLongitude = frame.TargetLongitude.HasValue ? (double)frame.TargetLongitude.Value : null
             });
         }
 
@@ -381,7 +385,9 @@ public class SessionsController : ControllerBase
                 Y = f.YCoordinate,
                 Width = f.Width,
                 Height = f.Height,
-                Fps = f.Fps
+                Fps = f.Fps,
+                TargetLatitude = f.TargetLatitude,
+                TargetLongitude = f.TargetLongitude
             })
             .ToListAsync(cancellationToken);
 
@@ -486,7 +492,9 @@ public class SessionsController : ControllerBase
                 Y = f.YCoordinate,
                 Width = f.Width,
                 Height = f.Height,
-                Fps = f.Fps
+                Fps = f.Fps,
+                TargetLatitude = f.TargetLatitude,
+                TargetLongitude = f.TargetLongitude
             })
             .ToListAsync(cancellationToken);
 

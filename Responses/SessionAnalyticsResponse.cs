@@ -33,6 +33,11 @@ public class AnalyticsPoint
     /// same axis as the movement series. Null for frames stored before fps was persisted.
     /// </summary>
     public decimal? Fps { get; set; }
+
+    /// <summary>Estimated real-world position of the tracked object at this frame, when available.</summary>
+    public decimal? TargetLatitude { get; set; }
+
+    public decimal? TargetLongitude { get; set; }
 }
 
 public class TrackingDrop

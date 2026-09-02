@@ -18,6 +18,11 @@ public class FrameResponse
 
     /// <summary>Tracker throughput at this frame; null for frames stored before it was persisted.</summary>
     public decimal? Fps { get; set; }
+
+    /// <summary>Estimated real-world position of the tracked object at this frame; see the mobile app's optional target geo-location feature.</summary>
+    public decimal? TargetLatitude { get; set; }
+
+    public decimal? TargetLongitude { get; set; }
 }
 
 public class SessionEventResponse

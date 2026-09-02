@@ -14,7 +14,9 @@ public readonly record struct ValidatedFrame(
     int Y,
     int Width,
     int Height,
-    double? Fps);
+    double? Fps,
+    double? TargetLatitude,
+    double? TargetLongitude);
 
 /// <summary>
 /// Validates what arrives over the tracking socket.
@@ -51,7 +53,9 @@ public static class IngestValidator
             message.Y!.Value,
             message.Width ?? 0,
             message.Height ?? 0,
-            message.Fps);
+            message.Fps,
+            message.TargetLatitude,
+            message.TargetLongitude);
         return true;
     }
 
@@ -94,6 +98,11 @@ public static class IngestValidator
             return $"frame.fps must be between {TrackingLimits.MinFps} and {TrackingLimits.MaxFps}.";
         }
 
+        if (ValidateTargetLocation(message.TargetLatitude, message.TargetLongitude) is { } locationProblem)
+        {
+            return locationProblem;
+        }
+
         return ValidateTimestamp(message.FrameTimestamp, session, now, "frame.frameTimestamp");
     }
 
@@ -109,6 +118,8 @@ public static class IngestValidator
         int? width,
         int? height,
         decimal? fps,
+        decimal? targetLatitude,
+        decimal? targetLongitude,
         TrackingSession session,
         DateTimeOffset now)
     {
@@ -119,10 +130,33 @@ public static class IngestValidator
             Y = y,
             Width = width,
             Height = height,
-            Fps = fps.HasValue ? (double)fps.Value : null
+            Fps = fps.HasValue ? (double)fps.Value : null,
+            TargetLatitude = targetLatitude.HasValue ? (double)targetLatitude.Value : null,
+            TargetLongitude = targetLongitude.HasValue ? (double)targetLongitude.Value : null
         };
 
         return Validate(message, session, now);
+    }
+
+    /// <summary>Same "sent as a pair, in range" rule as the session's own recorded location.</summary>
+    private static string? ValidateTargetLocation(double? latitude, double? longitude)
+    {
+        if (latitude.HasValue != longitude.HasValue)
+        {
+            return "frame.targetLatitude and frame.targetLongitude must be sent together.";
+        }
+
+        if (latitude is < -90 or > 90)
+        {
+            return "frame.targetLatitude must be between -90 and 90.";
+        }
+
+        if (longitude is < -180 or > 180)
+        {
+            return "frame.targetLongitude must be between -180 and 180.";
+        }
+
+        return null;
     }
 
     /// <summary>Returns null when the status event is usable, otherwise the reason.</summary>

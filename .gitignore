@@ -65,3 +65,4 @@ publish-selfcontained/
 MdfTracker-deploy.zip
 # Scratch files from smoke tests
 *.tmp
+nul
